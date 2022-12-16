@@ -37,6 +37,10 @@
 #include <algorithm>
 #include <list>
 #include <thread>
+#include <time.h>
+#include <iostream>
+#include <fstream>
+#include <stdlib.h>
 #include "src/core/constants.h"
 #include "src/core/logging.h"
 #include "src/core/model_config.h"
@@ -986,6 +990,15 @@ HTTPAPIServer::HTTPAPIServer(
       TRITONSERVER_ResponseAllocatorSetQueryFunction(
           allocator_, OutputBufferQuery),
       "setting allocator's query function");
+
+  // Read rate-batch data
+  std::ifstream ifs;
+  ifs.open("/opt/tritonserver/batch_info.txt");
+  char tmp[100];
+  while (ifs.getline(tmp, sizeof(tmp))) {
+    rate_table.push_back(std::stod(tmp));
+  }
+  ifs.close();
 }
 
 HTTPAPIServer::~HTTPAPIServer()
@@ -2192,6 +2205,43 @@ HTTPAPIServer::EVBufferToInput(
 
     RETURN_IF_ERR(TRITONSERVER_InferenceRequestAddInput(
         irequest, input_name, dtype, &shape_vec[0], shape_vec.size()));
+
+    // FIXME: make the following if-else block independent
+    if (!time_flag) { // first request
+      memcpy(shm_ptr, &rate_batch_size, 4);
+      // initial time value
+      LOG_INFO << "Initial Batch size : " << rate_batch_size << "\n";
+      clock_gettime(CLOCK_REALTIME, &start_time);
+      clock_gettime(CLOCK_REALTIME, &now_time);
+      request_count = shape_vec[0];
+      time_flag = true;
+    } else {
+      last_time = now_time;
+      clock_gettime(CLOCK_REALTIME, &now_time);
+      request_count += shape_vec[0];
+      double interval = now_time.tv_sec - start_time.tv_sec;
+      int time = 0;
+      if (interval > time) { // Every "time"+1+alpha seconds..
+        LOG_INFO << request_count << " " << interval;
+        request_rate = request_count / interval;
+        request_count = 0;
+        start_time = now_time;
+        // rate_table
+        if (request_rate < rate_table[0]) 
+          rate_batch_size = 1;
+        if (request_rate > rate_table[int(rate_table.size())-1])
+          rate_batch_size = 32; // FIXME: stop hard-coding largest batch size
+        for (int i = 0; i < int(rate_table.size())-1; i++) {
+          if (rate_table[i] == rate_table[i+1]) continue;
+          if (request_rate >= rate_table[i] && request_rate <= rate_table[i+1]) {
+            rate_batch_size = i + 2;
+            break;
+          }
+        }
+        LOG_INFO << rate_batch_size << "\n";
+        memcpy(shm_ptr, &rate_batch_size, 4);
+      }
+    }
 
     bool binary_input;
     size_t byte_size;

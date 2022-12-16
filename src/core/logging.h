@@ -28,8 +28,13 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
 namespace nvidia { namespace inferenceserver {
+
+extern int* shm_ptr;
 
 // A log message.
 class LogMessage {

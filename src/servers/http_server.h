@@ -32,6 +32,8 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <time.h>
+#include <vector>
 #include "src/core/constants.h"
 #include "src/core/logging.h"
 #include "src/servers/common.h"
@@ -214,6 +216,13 @@ class HTTPAPIServer : public HTTPServer {
     std::atomic<uint32_t> response_count_;
   };
 
+  bool time_flag = false;
+  struct timespec start_time, last_time, now_time;
+  int request_count = 0;
+  double request_rate = 0.0;
+  std::vector<double> rate_table;
+  int rate_batch_size = 1;
+  
  protected:
   explicit HTTPAPIServer(
       const std::shared_ptr<TRITONSERVER_Server>& server,

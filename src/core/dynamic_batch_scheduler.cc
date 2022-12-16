@@ -428,6 +428,12 @@ DynamicBatchScheduler::GetDynamicBatch()
   // 'mu_' mutex must be held when this function is called. queue_
   // must not be empty.
 
+  // Update the preferred batch size from shared memory
+  preferred_batch_sizes_.clear();
+  preferred_batch_sizes_.insert(shm_ptr[0]);
+  max_preferred_batch_size_ = shm_ptr[0];
+  
+  // printf("%ld\n",max_preferred_batch_size_);
   // Examine the new requests. If adding these new requests to the
   // pending batch allows a preferred batch size then execute it
   // immediately. Stop examining requests if the maximum preferred

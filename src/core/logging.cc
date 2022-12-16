@@ -43,7 +43,24 @@ namespace nvidia { namespace inferenceserver {
 
 Logger gLogger_;
 
-Logger::Logger() : enables_{true, true, true}, vlevel_(0) {}
+int shm_fd;
+int *shm_ptr;
+
+Logger::Logger() : enables_{true, true, true}, vlevel_(0) {
+  if ((shm_fd = shm_open("/request_rate", O_RDWR|O_CREAT|O_EXCL, 0660)) > 0) {
+    printf("* create SHM :/dev/shm/%s\n", "/request_rate");
+    if(ftruncate(shm_fd, 1024) == -1)
+      exit(EXIT_FAILURE);
+  } else {
+    if(errno != EEXIST)
+      exit(EXIT_FAILURE);
+    if((shm_fd = shm_open("/request_rate", O_RDWR, 0)) == -1)
+    exit(EXIT_FAILURE);
+  }
+  shm_ptr = (int*)mmap(NULL, 1024, PROT_READ|PROT_WRITE, MAP_SHARED, shm_fd, 0);
+  if(shm_ptr == MAP_FAILED)
+    exit(EXIT_FAILURE);
+}
 
 void
 Logger::Log(const std::string& msg)
