@@ -217,12 +217,8 @@ class HTTPAPIServer : public HTTPServer {
   };
 
  private:
-  bool time_flag = false;
-  struct timespec start_time, last_time, now_time;
-  int request_count = 0;
-  double request_rate = 0.0;
   std::vector<double> rate_table;
-  int rate_batch_size = 1;
+  int max_batch_size_;
   int req_count;
   std::mutex mu_;
   std::condition_variable cv_;
