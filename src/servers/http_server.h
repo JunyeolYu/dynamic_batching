@@ -216,13 +216,20 @@ class HTTPAPIServer : public HTTPServer {
     std::atomic<uint32_t> response_count_;
   };
 
+ private:
   bool time_flag = false;
   struct timespec start_time, last_time, now_time;
   int request_count = 0;
   double request_rate = 0.0;
   std::vector<double> rate_table;
   int rate_batch_size = 1;
-  
+  int req_count;
+  std::mutex mu_;
+  std::condition_variable cv_;
+  std::thread monitor_;
+  std::atomic<bool> monitor_thread_exit_;
+  void BatchMonitor();
+
  protected:
   explicit HTTPAPIServer(
       const std::shared_ptr<TRITONSERVER_Server>& server,

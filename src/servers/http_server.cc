@@ -46,6 +46,7 @@
 #include "src/core/model_config.h"
 #include "src/servers/classification.h"
 #include "src/servers/data_compressor.h"
+#include <unistd.h>
 
 #define TRITONJSON_STATUSTYPE TRITONSERVER_Error*
 #define TRITONJSON_STATUSRETURN(M) \
@@ -1009,6 +1010,22 @@ HTTPAPIServer::~HTTPAPIServer()
   LOG_TRITONSERVER_ERROR(
       TRITONSERVER_ResponseAllocatorDelete(allocator_),
       "deleting response allocator");
+  
+  // Signal the monitor thread to exit and then wait for it
+  monitor_thread_exit_.store(true);
+  cv_.notify_one();
+  if (monitor_.joinable()) {
+    monitor_.join();
+  }
+}
+
+void
+HTTPAPIServer::BatchMonitor()
+{
+  while(!monitor_thread_exit_.load()) {
+    LOG_INFO << req_count;
+    usleep(1000000);
+  }
 }
 
 // Make sure to keep InferResponseAlloc and OutputBufferQuery logic in sync
@@ -2206,6 +2223,12 @@ HTTPAPIServer::EVBufferToInput(
     RETURN_IF_ERR(TRITONSERVER_InferenceRequestAddInput(
         irequest, input_name, dtype, &shape_vec[0], shape_vec.size()));
 
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      req_count++;
+    }
+    cv_.notify_one();
+
     // FIXME: make the following if-else block independent
     if (!time_flag) { // first request
       memcpy(shm_ptr, &rate_batch_size, 4);
@@ -3118,10 +3141,19 @@ HTTPAPIServer::Create(
     const std::shared_ptr<SharedMemoryManager>& shm_manager, const int32_t port,
     const int thread_cnt, std::unique_ptr<HTTPServer>* http_server)
 {
-  http_server->reset(
-      new HTTPAPIServer(server, trace_manager, shm_manager, port, thread_cnt));
+  HTTPAPIServer* api = 
+  new HTTPAPIServer(server, trace_manager, shm_manager, port, thread_cnt);
+  
+  // For request monitor thread
+  std::unique_ptr<HTTPAPIServer> api_(api);
+  api_->monitor_ = std::thread([api](){api->BatchMonitor();});
+  api_->monitor_thread_exit_.store(false);
+  api_->req_count = 0;
 
-  const std::string addr = "0.0.0.0:" + std::to_string(port);
+  http_server->reset(api_.release());
+
+  const std::string addr = "0.0.0.0:" + std::to_string(port) + " / "
+                            + std::to_string(thread_cnt) + " threads ";
   LOG_INFO << "Started HTTPService at " << addr;
 
   return nullptr;
