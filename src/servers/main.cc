@@ -149,6 +149,7 @@ int grpc_infer_allocation_pool_size_ = 8;
 #if defined(TRITON_ENABLE_HTTP)
 // The number of threads to initialize for the HTTP front-end.
 int http_thread_cnt_ = 8;
+double time_window_ = 1.0;
 #endif  // TRITON_ENABLE_HTTP
 
 #ifdef _WIN32
@@ -233,6 +234,7 @@ enum OptionId {
   OPTION_ALLOW_HTTP,
   OPTION_HTTP_PORT,
   OPTION_HTTP_THREAD_COUNT,
+  OPTION_HTTP_TIME_WINDOW,
 #endif  // TRITON_ENABLE_HTTP
 #if defined(TRITON_ENABLE_GRPC)
   OPTION_ALLOW_GRPC,
@@ -361,6 +363,8 @@ std::vector<Option> options_
        "The port for the server to listen on for HTTP requests."},
       {OPTION_HTTP_THREAD_COUNT, "http-thread-count", Option::ArgInt,
        "Number of threads handling HTTP requests."},
+      {OPTION_HTTP_TIME_WINDOW, "time-window", Option::ArgFloat,
+       "The time window size for rate monitoring. Default is 1.0 (1 sec)."},
 #endif  // TRITON_ENABLE_HTTP
 #if defined(TRITON_ENABLE_GRPC)
       {OPTION_ALLOW_GRPC, "allow-grpc", Option::ArgBool,
@@ -689,7 +693,7 @@ StartHttpService(
 {
   TRITONSERVER_Error* err = nvidia::inferenceserver::HTTPAPIServer::Create(
       server, trace_manager, shm_manager, http_port_, http_thread_cnt_,
-      service);
+      (int)(time_window_ * 1000000), service);
   if (err == nullptr) {
     err = (*service)->Start();
   }
@@ -1047,13 +1051,11 @@ ParseLongLongOption(const std::string arg)
   return std::stoll(arg);
 }
 
-#if 0
 float
 ParseFloatOption(const std::string arg)
 {
   return std::stof(arg);
 }
-#endif
 
 double
 ParseDoubleOption(const std::string arg)
@@ -1260,6 +1262,7 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
 #if defined(TRITON_ENABLE_HTTP)
   int32_t http_port = http_port_;
   int32_t http_thread_cnt = http_thread_cnt_;
+  double time_window = time_window_;
 #endif  // TRITON_ENABLE_HTTP
 
 #if defined(TRITON_ENABLE_GRPC)
@@ -1388,6 +1391,9 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
         break;
       case OPTION_HTTP_THREAD_COUNT:
         http_thread_cnt = ParseIntOption(optarg);
+        break;
+      case OPTION_HTTP_TIME_WINDOW:
+        time_window = ParseFloatOption(optarg);
         break;
 #endif  // TRITON_ENABLE_HTTP
 
@@ -1639,6 +1645,7 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
 #if defined(TRITON_ENABLE_HTTP)
   http_port_ = http_port;
   http_thread_cnt_ = http_thread_cnt;
+  time_window_ = time_window;
 #endif  // TRITON_ENABLE_HTTP
 
 #if defined(TRITON_ENABLE_SAGEMAKER)

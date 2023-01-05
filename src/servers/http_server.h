@@ -111,7 +111,7 @@ class HTTPAPIServer : public HTTPServer {
       const std::shared_ptr<TRITONSERVER_Server>& server,
       nvidia::inferenceserver::TraceManager* trace_manager,
       const std::shared_ptr<SharedMemoryManager>& smb_manager,
-      const int32_t port, const int thread_cnt,
+      const int32_t port, const int thread_cnt, const int time_window,
       std::unique_ptr<HTTPServer>* http_server);
 
   virtual ~HTTPAPIServer();
@@ -224,7 +224,7 @@ class HTTPAPIServer : public HTTPServer {
   std::condition_variable cv_;
   std::thread monitor_;
   std::atomic<bool> monitor_thread_exit_;
-  void BatchMonitor();
+  void BatchMonitor(int time_window);
 
  protected:
   explicit HTTPAPIServer(

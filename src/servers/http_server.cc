@@ -1023,9 +1023,9 @@ HTTPAPIServer::~HTTPAPIServer()
 }
 
 void
-HTTPAPIServer::BatchMonitor()
+HTTPAPIServer::BatchMonitor(int time_window)
 {
-  int window = 1000000;// FIXME: get interval through first argument
+  int window = time_window;
   int count_prev = 0;
   int rate_batch_size = 1;
   int request_count = 0;
@@ -1064,7 +1064,7 @@ HTTPAPIServer::BatchMonitor()
       }
     }
 
-    LOG_INFO << rate_batch_size << " " << request_rate << "\n";
+    LOG_INFO << rate_batch_size << " " << request_count;
     memcpy(shm_ptr, &rate_batch_size, 4);
     usleep(window);
   }
@@ -3144,14 +3144,16 @@ HTTPAPIServer::Create(
     const std::shared_ptr<TRITONSERVER_Server>& server,
     nvidia::inferenceserver::TraceManager* trace_manager,
     const std::shared_ptr<SharedMemoryManager>& shm_manager, const int32_t port,
-    const int thread_cnt, std::unique_ptr<HTTPServer>* http_server)
+    const int thread_cnt, const int time_window,
+    std::unique_ptr<HTTPServer>* http_server)
 {
   HTTPAPIServer* api = 
   new HTTPAPIServer(server, trace_manager, shm_manager, port, thread_cnt);
   
   // For request monitor thread
   std::unique_ptr<HTTPAPIServer> api_(api);
-  api_->monitor_ = std::thread([api](){api->BatchMonitor();});
+  api_->monitor_ = 
+            std::thread([api, time_window](){api->BatchMonitor(time_window);});
   api_->monitor_thread_exit_.store(false);
   api_->req_count = 0;
 
